@@ -1,0 +1,26 @@
+# Production HA only. This example selects a self-hosted S3-compatible service
+# by namespace and pod labels. Replace both sentinels and the port as required.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pyroscope-to-object-storage
+  namespace: pyroscope-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+      app.kubernetes.io/instance: pyroscope
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: REPLACE_WITH_OBJECT_STORAGE_NAMESPACE
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: REPLACE_WITH_OBJECT_STORAGE_APP_NAME
+      ports:
+        - protocol: TCP
+          port: 443
+

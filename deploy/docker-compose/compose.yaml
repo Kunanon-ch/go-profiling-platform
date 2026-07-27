@@ -1,0 +1,141 @@
+name: pyroscope-evaluation
+
+services:
+  pyroscope:
+    image: grafana/pyroscope:2.2.0@sha256:7f019d866e474609c7f112d2632d75bdf8ad418c08461fcb5193444bb6dc476d
+    command:
+      - -target=all
+      - -architecture.storage=v2
+      - -storage.backend=filesystem
+      - -storage.filesystem.dir=/data/v2/shared
+      - -metastore.data-dir=/data/v2/metastore/data
+      - -metastore.raft.dir=/data/v2/metastore/raft
+      - -metastore.raft.snapshots-dir=/data/v2/metastore/raft
+      - -retention-period=24h
+      - -auth.multitenancy-enabled=false
+      - -self-profiling.disable-push=true
+      - -usage-stats.enabled=false
+      - -tracing.enabled=false
+      - -log.level=info
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - pyroscope-data:/data
+    networks:
+      - profiling
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
+    depends_on:
+      - pyroscope
+    user: "472:472"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in deploy/docker-compose/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources/pyroscope.yaml:/etc/grafana/provisioning/datasources/pyroscope.yaml:ro
+    networks:
+      - profiling
+    restart: unless-stopped
+
+  gateway:
+    image: nginxinc/nginx-unprivileged:1.29.5-alpine@sha256:42a7d7f2ee23e9f5a1dcdf3647ba5c585bbd18f79e79cd817e70e8cd61c55779
+    entrypoint:
+      - /usr/sbin/nginx
+    command:
+      - -g
+      - daemon off;
+    depends_on:
+      - pyroscope
+      - grafana
+    user: "101:101"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:4040:4040"
+    networks:
+      - profiling
+      - edge
+    restart: unless-stopped
+
+  smoke:
+    build:
+      context: ../..
+      dockerfile: deploy/docker-compose/Dockerfile.smoke
+    profiles:
+      - smoke
+    depends_on:
+      - pyroscope
+    read_only: true
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    stop_grace_period: 60s
+    environment:
+      PYROSCOPE_ENABLED: "true"
+      PYROSCOPE_SERVER_ADDRESS: http://pyroscope:4040
+      PYROSCOPE_ALLOW_INSECURE_HTTP: "true"
+      PYROSCOPE_APPLICATION_NAME: profilerprobe-smoke
+      PYROSCOPE_TAGS: environment=local,version=smoke
+      PYROSCOPE_LOGGING: "true"
+      PYROSCOPE_DISABLE_GC_RUNS: "true"
+      PYROSCOPE_UPLOAD_RATE: 15s
+      PYROSCOPE_HTTP_TIMEOUT: 5s
+      PYROSCOPE_PROFILE_CPU: "true"
+      PYROSCOPE_PROFILE_ALLOC_OBJECTS: "false"
+      PYROSCOPE_PROFILE_ALLOC_SPACE: "true"
+      PYROSCOPE_PROFILE_INUSE_OBJECTS: "false"
+      PYROSCOPE_PROFILE_INUSE_SPACE: "true"
+      PYROSCOPE_PROFILE_GOROUTINES: "true"
+      PYROSCOPE_PROFILE_MUTEX: "false"
+      PYROSCOPE_PROFILE_BLOCK: "false"
+      PYROSCOPE_MUTEX_PROFILE_FRACTION: "5"
+      PYROSCOPE_BLOCK_PROFILE_RATE: "5"
+    networks:
+      - profiling
+    restart: "no"
+
+networks:
+  profiling:
+    internal: true
+  edge:
+    driver: bridge
+
+volumes:
+  pyroscope-data:
+  grafana-data:

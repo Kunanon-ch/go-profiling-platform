@@ -1,0 +1,68 @@
+# Strategic-merge reference for an existing application Deployment.
+# Every REPLACE_WITH_* sentinel must be replaced in the company's overlay.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: REPLACE_WITH_DEPLOYMENT_NAME
+  namespace: REPLACE_WITH_APPLICATION_NAMESPACE
+spec:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: REPLACE_WITH_APPLICATION_NAME
+        app.kubernetes.io/version: REPLACE_WITH_IMMUTABLE_RELEASE
+    spec:
+      # SITE INPUT integer: measured application drain plus at least 45 seconds
+      # for the profiler's final flush; never lower an existing larger value.
+      terminationGracePeriodSeconds: REPLACE_WITH_TERMINATION_GRACE_SECONDS
+      containers:
+        - name: REPLACE_WITH_CONTAINER_NAME
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PYROSCOPE_RELEASE_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['app.kubernetes.io/version']
+            - name: PYROSCOPE_ENABLED
+              value: "false"
+            - name: PYROSCOPE_SERVER_ADDRESS
+              value: https://REPLACE_WITH_INTERNAL_PYROSCOPE_GATEWAY
+            - name: PYROSCOPE_ALLOW_INSECURE_HTTP
+              value: "false"
+            - name: PYROSCOPE_APPLICATION_NAME
+              value: REPLACE_WITH_APPLICATION_NAME
+            - name: PYROSCOPE_TAGS
+              value: environment=REPLACE_WITH_ENVIRONMENT,version=$(PYROSCOPE_RELEASE_VERSION),namespace=$(POD_NAMESPACE)
+            - name: PYROSCOPE_TENANT_ID
+              value: ""
+            - name: PYROSCOPE_LOGGING
+              value: "false"
+            - name: PYROSCOPE_DISABLE_GC_RUNS
+              value: "true"
+            - name: PYROSCOPE_UPLOAD_RATE
+              value: 15s
+            - name: PYROSCOPE_HTTP_TIMEOUT
+              value: 5s
+            - name: PYROSCOPE_PROFILE_CPU
+              value: "true"
+            - name: PYROSCOPE_PROFILE_ALLOC_OBJECTS
+              value: "false"
+            - name: PYROSCOPE_PROFILE_ALLOC_SPACE
+              value: "true"
+            - name: PYROSCOPE_PROFILE_INUSE_OBJECTS
+              value: "false"
+            - name: PYROSCOPE_PROFILE_INUSE_SPACE
+              value: "true"
+            - name: PYROSCOPE_PROFILE_GOROUTINES
+              value: "true"
+            - name: PYROSCOPE_PROFILE_MUTEX
+              value: "false"
+            - name: PYROSCOPE_PROFILE_BLOCK
+              value: "false"
+            - name: PYROSCOPE_MUTEX_PROFILE_FRACTION
+              value: "5"
+            - name: PYROSCOPE_BLOCK_PROFILE_RATE
+              value: "5"

@@ -1,0 +1,307 @@
+# Official chart: grafana/pyroscope 2.2.0
+# Production design input, NOT a drop-in installation. Before use, create the
+# pyroscope-s3 Secret outside Git and replace REPLACE_WITH_STORAGE_CLASS.
+
+architecture:
+  storage:
+    v1: false
+    v2: true
+  deployUnifiedServices: true
+  microservices:
+    enabled: true
+    v2:
+      query-backend:
+        replicaCount: 3
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 3
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &query_backend_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: query-backend
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *query_backend_labels
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+      query-frontend:
+        replicaCount: 2
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 2
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &query_frontend_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: query-frontend
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *query_frontend_labels
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      distributor:
+        replicaCount: 2
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 2
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &distributor_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: distributor
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *distributor_labels
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+      segment-writer:
+        replicaCount: 3
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 3
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &segment_writer_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: segment-writer
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *segment_writer_labels
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+      compaction-worker:
+        replicaCount: 3
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 3
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &compaction_worker_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: compaction-worker
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *compaction_worker_labels
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+      metastore:
+        replicaCount: 3
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 3
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &metastore_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: metastore
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *metastore_labels
+        persistence:
+          enabled: true
+          accessModes:
+            - ReadWriteOnce
+          size: 20Gi
+          storageClassName: REPLACE_WITH_STORAGE_CLASS
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+      tenant-settings:
+        replicaCount: 2
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 2
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &tenant_settings_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: tenant-settings
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *tenant_settings_labels
+      ad-hoc-profiles:
+        replicaCount: 2
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 2
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &ad_hoc_profiles_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: ad-hoc-profiles
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *ad_hoc_profiles_labels
+      admin:
+        replicaCount: 2
+        topologySpreadConstraints:
+          - maxSkew: 1
+            minDomains: 2
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels: &admin_labels
+                app.kubernetes.io/name: pyroscope
+                app.kubernetes.io/instance: pyroscope
+                app.kubernetes.io/component: admin
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels: *admin_labels
+
+pyroscope:
+  disableSelfProfile: true
+
+  image:
+    repository: grafana/pyroscope
+    tag: "2.2.0@sha256:7f019d866e474609c7f112d2632d75bdf8ad418c08461fcb5193444bb6dc476d"
+    pullPolicy: IfNotPresent
+
+  rbac:
+    # Required for v2 kubernetes:/// metastore discovery. The chart's Role is
+    # namespace-scoped and read-only; it does not grant cloud-provider access.
+    create: true
+  serviceAccount:
+    # Token automount is intentionally left enabled for authenticated discovery.
+    create: true
+    name: pyroscope
+
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  service:
+    type: ClusterIP
+    port: 4040
+    port_name: http2
+    scheme: HTTP
+
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+
+  extraArgs:
+    # SITE INPUT: change to true only with a gateway that authenticates clients,
+    # overwrites X-Scope-OrgID from trusted identity, and passes isolation tests.
+    auth.multitenancy-enabled: "false"
+    config.expand-env: "true"
+    log.level: info
+    retention-period: 720h
+    tracing.enabled: "false"
+    usage-stats.enabled: "false"
+
+  # The named Secret is intentionally not supplied by this repository. Create
+  # it through the company's secret manager with the five keys referenced below.
+  # PYROSCOPE_S3_ENDPOINT must be hostname:port only (no scheme or URL path).
+  # TLS is selected by insecure: false; its certificate chain must validate
+  # against the CA trust available inside every Pyroscope container.
+  extraEnvFrom:
+    - secretRef:
+        name: pyroscope-s3
+
+  structuredConfig:
+    storage:
+      backend: s3
+      prefix: pyroscope
+      s3:
+        endpoint: ${PYROSCOPE_S3_ENDPOINT}
+        region: ${PYROSCOPE_S3_REGION}
+        bucket_name: ${PYROSCOPE_S3_BUCKET}
+        access_key_id: ${PYROSCOPE_S3_ACCESS_KEY_ID}
+        secret_access_key: ${PYROSCOPE_S3_SECRET_ACCESS_KEY}
+        insecure: false
+        bucket_lookup_type: path-style
+
+  extraVolumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 256Mi
+  extraVolumeMounts:
+    - name: tmp
+      mountPath: /tmp
+
+alloy:
+  enabled: false
+agent:
+  enabled: false
+minio:
+  enabled: false
+ingress:
+  enabled: false
+serviceMonitor:
+  enabled: false

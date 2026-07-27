@@ -1,0 +1,236 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.25.12"
+  GOTOOLCHAIN: local
+  GOWORK: "off"
+  COVERAGE_THRESHOLD: "80.0"
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "The following Go files are not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Check module files
+        shell: bash
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          go mod verify
+
+      - name: Test corporate module-path migration in a copied checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="git.company.example/platform/profilerprobe"
+          migration_root="$(mktemp -d)"
+          trap 'rm -rf "$migration_root"' EXIT
+          cp --archive . "$migration_root/repo"
+          rm -rf "$migration_root/repo/.git"
+          cd "$migration_root/repo"
+
+          go run ./cmd/set-module-path -- "$target"
+          test "$(go list -m -f='{{.Path}}')" = "$target"
+          go list -tags smoke -f='{{join .Imports "\n"}}' ./cmd/pyroscope-smoke \
+            | grep --fixed-strings --line-regexp "$target"
+          go test -tags smoke ./cmd/pyroscope-smoke
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Compile smoke workload
+        run: go test -tags smoke ./cmd/pyroscope-smoke
+
+      - name: Test with race detector
+        run: go test -race -shuffle=on -covermode atomic -coverprofile coverage.out ./...
+
+      - name: Enforce coverage threshold
+        shell: bash
+        run: |
+          total="$(go tool cover -func coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')"
+          if [[ -z "$total" ]]; then
+            echo "Unable to determine total coverage"
+            exit 1
+          fi
+          echo "Total coverage: ${total}% (required: ${COVERAGE_THRESHOLD}%)"
+          awk -v total="$total" -v threshold="$COVERAGE_THRESHOLD" \
+            'BEGIN { if ((total + 0) < (threshold + 0)) exit 1 }'
+
+      - name: Upload coverage profile
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-${{ github.run_id }}
+          path: coverage.out
+          if-no-files-found: warn
+          retention-days: 14
+
+  build:
+    name: build-linux-${{ matrix.goarch }}
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch:
+          - amd64
+          - arm64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build Linux packages
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+        shell: bash
+        run: |
+          go build ./...
+          go build -tags smoke -o "/tmp/pyroscope-smoke-${GOARCH}" ./cmd/pyroscope-smoke
+
+  deployment-references:
+    name: deployment-references
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GRAFANA_ADMIN_PASSWORD: compose-validation-only
+      HELM_VERSION: v3.21.0
+      KUBECONFORM_VERSION: v0.7.0
+      KUBECONFORM_SHA256: c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3
+      KUBERNETES_VERSION: 1.30.0
+      PYROSCOPE_CHART_VERSION: "2.2.0"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate Docker Compose model
+        run: docker compose -f deploy/docker-compose/compose.yaml --profile smoke config --quiet
+
+      - name: Build isolated smoke image
+        run: docker build --file deploy/docker-compose/Dockerfile.smoke --tag profiler-smoke:ci .
+
+      - name: Set up pinned Helm
+        uses: Azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Download and verify pinned Pyroscope chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart="/tmp/pyroscope-${PYROSCOPE_CHART_VERSION}.tgz"
+          curl --fail --location --silent --show-error \
+            --output "$chart" \
+            "https://github.com/grafana/helm-charts/releases/download/pyroscope-${PYROSCOPE_CHART_VERSION}/pyroscope-${PYROSCOPE_CHART_VERSION}.tgz"
+          (cd /tmp && sha256sum --check --strict "$GITHUB_WORKSPACE/deploy/helm/SHA256SUMS")
+
+      - name: Lint and render Helm references
+        shell: bash
+        run: |
+          set -euo pipefail
+          chart="/tmp/pyroscope-${PYROSCOPE_CHART_VERSION}.tgz"
+          helm version --short
+          helm lint "$chart" --values deploy/helm/values-single-binary.yaml
+          helm template pyroscope "$chart" \
+            --namespace pyroscope-system \
+            --values deploy/helm/values-single-binary.yaml \
+            > /tmp/pyroscope-single-binary.yaml
+          helm lint "$chart" --values deploy/helm/values-production-ha.example.yaml
+          helm template pyroscope "$chart" \
+            --namespace pyroscope-system \
+            --values deploy/helm/values-production-ha.example.yaml \
+            > /tmp/pyroscope-production-ha.yaml
+
+          for rendered in /tmp/pyroscope-single-binary.yaml /tmp/pyroscope-production-ha.yaml; do
+            grep --quiet '^kind: Role$' "$rendered"
+            grep --quiet '^kind: RoleBinding$' "$rendered"
+            grep --quiet 'serviceAccountName: pyroscope' "$rendered"
+          done
+
+      - name: Validate standalone Kubernetes references
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="/tmp/kubeconform-linux-amd64.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          echo "${KUBECONFORM_SHA256}  ${archive}" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory /tmp kubeconform
+
+          /tmp/kubeconform \
+            -strict \
+            -summary \
+            -kubernetes-version "${KUBERNETES_VERSION}" \
+            /tmp/pyroscope-single-binary.yaml \
+            /tmp/pyroscope-production-ha.yaml
+
+          mkdir --parents /tmp/kubernetes-references
+          for source in deploy/kubernetes/*.yaml; do
+            sed --regexp-extended 's/REPLACE_WITH_[A-Z0-9_]+/example/g' \
+              "$source" > "/tmp/kubernetes-references/$(basename "$source")"
+          done
+
+          find /tmp/kubernetes-references -type f -name '*.yaml' ! -name 'deployment-*.yaml' -print0 \
+            | xargs --null /tmp/kubeconform \
+                -strict \
+                -summary \
+                -kubernetes-version "${KUBERNETES_VERSION}"
+
+          # Strategic-merge Deployment fragments are intentionally partial and
+          # cannot be checked as standalone Deployment resources. At minimum,
+          # ensure every fragment remains valid YAML with one document.
+          ruby -e 'require "yaml"; ARGV.each { |f| abort("empty YAML: #{f}") if YAML.load_stream(File.read(f)).compact.empty? }' \
+            /tmp/kubernetes-references/deployment-*.yaml
+
+      - name: Reject unresolved cloud-provider configuration
+        shell: bash
+        run: |
+          if grep -RInE 'CLOUD[_]PROFILER_|cloud[.]google[.]com/go/profiler|google[_]project|google[_]service[_]account' \
+            --exclude-dir=.git --exclude='*.md' .; then
+            echo "Legacy Google Cloud Profiler configuration remains in operational files"
+            exit 1
+          fi

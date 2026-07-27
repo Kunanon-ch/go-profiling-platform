@@ -1,0 +1,37 @@
+# Apply in the application namespace only when that namespace uses egress
+# isolation. Replace every sentinel before admission.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-application-to-profiler-gateway
+  namespace: REPLACE_WITH_APPLICATION_NAMESPACE
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: REPLACE_WITH_APPLICATION_NAME
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: REPLACE_WITH_GATEWAY_NAMESPACE
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: REPLACE_WITH_GATEWAY_NAME
+      ports:
+        - protocol: TCP
+          # The gateway Pod must declare its TLS listener with this port name.
+          port: https
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

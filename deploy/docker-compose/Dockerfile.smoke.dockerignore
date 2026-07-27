@@ -1,0 +1,8 @@
+**
+!go.mod
+!go.sum
+!profiler.go
+!cmd/
+!cmd/pyroscope-smoke/
+!cmd/pyroscope-smoke/*.go
+

@@ -1,0 +1,12 @@
+FROM golang:1.25.12-bookworm@sha256:ea341baa9bd5ba6784f6d7161ace70544349a6242d54d34a0fbfd2c4d51c9d58 AS builder
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download && go mod verify
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -tags=smoke -ldflags="-s -w" -o /out/pyroscope-smoke ./cmd/pyroscope-smoke
+
+FROM scratch
+COPY --from=builder --chown=65532:65532 /out/pyroscope-smoke /pyroscope-smoke
+USER 65532:65532
+ENTRYPOINT ["/pyroscope-smoke"]

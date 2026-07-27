@@ -1,0 +1,27 @@
+# Optional and intentionally fail-closed until both selectors are replaced.
+# NetworkPolicy is L3/L4 only: allowing TCP 4040 also makes non-metrics backend
+# APIs reachable from the selected monitoring Pods. Select a tightly controlled
+# identity, or prefer mesh/gateway authorization restricted to GET /metrics.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-trusted-monitoring-to-pyroscope
+  namespace: pyroscope-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+      app.kubernetes.io/instance: pyroscope
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: REPLACE_WITH_MONITORING_NAMESPACE
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: REPLACE_WITH_MONITORING_APP_NAME
+      ports:
+        - protocol: TCP
+          port: 4040

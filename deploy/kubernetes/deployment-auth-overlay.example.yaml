@@ -1,0 +1,36 @@
+# Optional strategic-merge overlay for a gateway that enforces Basic Auth.
+# The referenced Secret is intentionally not included in this repository.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: REPLACE_WITH_DEPLOYMENT_NAME
+  namespace: REPLACE_WITH_APPLICATION_NAMESPACE
+spec:
+  template:
+    spec:
+      containers:
+        - name: REPLACE_WITH_CONTAINER_NAME
+          env:
+            - name: PYROSCOPE_BASIC_AUTH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pyroscope-client-auth
+                  key: username
+            - name: PYROSCOPE_BASIC_AUTH_PASSWORD_FILE
+              value: /var/run/secrets/pyroscope/password
+          volumeMounts:
+            - name: pyroscope-client-auth
+              mountPath: /var/run/secrets/pyroscope
+              readOnly: true
+      volumes:
+        - name: pyroscope-client-auth
+          secret:
+            secretName: pyroscope-client-auth
+            # Secret volumes are root-owned by default. Read-only 0444 keeps the
+            # file readable by an arbitrary non-root application UID without
+            # changing that application's pod-level fsGroup. Only this container
+            # mounts the volume.
+            defaultMode: 0444
+            items:
+              - key: password
+                path: password

@@ -1,0 +1,113 @@
+# Replace the gateway selector plus the TEST-NET Kubernetes API CIDR and API
+# port. Until then, client traffic and discovery fail closed. Applications and
+# Grafana must never be allowed directly to this unauthenticated backend.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pyroscope-default-deny
+  namespace: pyroscope-system
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pyroscope-allow-peer-and-control-plane
+  namespace: pyroscope-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+      app.kubernetes.io/instance: pyroscope
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pyroscope
+              app.kubernetes.io/instance: pyroscope
+      ports:
+        - protocol: TCP
+          port: 4040
+        - protocol: TCP
+          port: 7946
+        - protocol: TCP
+          port: 9095
+        - protocol: TCP
+          port: 9099
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pyroscope
+              app.kubernetes.io/instance: pyroscope
+      ports:
+        - protocol: TCP
+          port: 4040
+        - protocol: TCP
+          port: 7946
+        - protocol: TCP
+          port: 9095
+        - protocol: TCP
+          port: 9099
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # SITE INPUT: v2 metastore discovery calls the Kubernetes API over HTTPS.
+    # 192.0.2.0/32 is an RFC 5737 documentation address and is intentionally
+    # unreachable. Replace it with the target cluster's exact API Service IP
+    # (/32) or control-plane egress CIDR after checking the CNI's DNAT behavior.
+    # Port 443 is the fail-closed Service-IP default; replace it too if the CNI
+    # observes the post-DNAT control-plane port (commonly 6443).
+    - to:
+        - ipBlock:
+            cidr: 192.0.2.0/32
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# In production HA, the gateway may reach only the public write/read path.
+# Route ingest/push to distributor and query/render to query-frontend.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pyroscope-allow-production-gateway
+  namespace: pyroscope-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+      app.kubernetes.io/instance: pyroscope
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          - distributor
+          - query-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: REPLACE_WITH_GATEWAY_NAMESPACE
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: REPLACE_WITH_GATEWAY_NAME
+      ports:
+        - protocol: TCP
+          port: 4040

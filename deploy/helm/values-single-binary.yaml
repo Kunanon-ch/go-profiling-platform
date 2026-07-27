@@ -1,0 +1,95 @@
+# Official chart: grafana/pyroscope 2.2.0
+# Evaluation/small-installation baseline. This is one failure domain and must
+# never be scaled above one replica while it uses filesystem storage.
+
+architecture:
+  storage:
+    v1: false
+    v2: true
+  microservices:
+    enabled: false
+
+pyroscope:
+  replicaCount: 1
+  disableSelfProfile: true
+
+  image:
+    repository: grafana/pyroscope
+    tag: "2.2.0@sha256:7f019d866e474609c7f112d2632d75bdf8ad418c08461fcb5193444bb6dc476d"
+    pullPolicy: IfNotPresent
+
+  rbac:
+    # Pyroscope v2 discovers its metastore through the Kubernetes API. The
+    # official chart creates a namespace-scoped read-only discovery Role and
+    # RoleBinding (get/list/watch only); this is Kubernetes RBAC, not cloud IAM.
+    create: true
+  serviceAccount:
+    # Token automount is intentionally left enabled for authenticated discovery.
+    create: true
+    name: pyroscope
+
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  service:
+    type: ClusterIP
+    port: 4040
+    port_name: http2
+    scheme: HTTP
+
+  persistence:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    size: 20Gi
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  podDisruptionBudget:
+    enabled: false
+
+  extraArgs:
+    # Single trust boundary. See README before enabling tenant isolation.
+    auth.multitenancy-enabled: "false"
+    log.level: info
+    retention-period: 168h
+    tracing.enabled: "false"
+    usage-stats.enabled: "false"
+
+  extraVolumes:
+    - name: tmp
+      emptyDir:
+        sizeLimit: 128Mi
+  extraVolumeMounts:
+    - name: tmp
+      mountPath: /tmp
+
+alloy:
+  enabled: false
+agent:
+  enabled: false
+minio:
+  enabled: false
+ingress:
+  enabled: false
+serviceMonitor:
+  enabled: false

@@ -1,0 +1,52 @@
+# NON-PRODUCTION SINGLE-BINARY ONLY. The HA policies intentionally expose only
+# distributor and query-frontend. Apply both documents below only when the
+# one-replica chart renders app.kubernetes.io/component=all.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-to-single-binary-pyroscope
+  namespace: pyroscope-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+      app.kubernetes.io/instance: pyroscope
+      app.kubernetes.io/component: all
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: REPLACE_WITH_GATEWAY_NAMESPACE
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: REPLACE_WITH_GATEWAY_NAME
+      ports:
+        - protocol: TCP
+          port: 4040
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-gateway-egress-to-single-binary-pyroscope
+  namespace: REPLACE_WITH_GATEWAY_NAMESPACE
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: REPLACE_WITH_GATEWAY_NAME
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: pyroscope-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pyroscope
+              app.kubernetes.io/instance: pyroscope
+              app.kubernetes.io/component: all
+      ports:
+        - protocol: TCP
+          port: 4040
