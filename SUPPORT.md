@@ -54,7 +54,7 @@ These controls cannot be safely replaced with fabricated team handles or address
 The supplied workflows target GitHub-hosted Linux runners and pin a Go toolchain plus immutable third-party Action commits. A self-hosted runner or GitHub Enterprise installation must provide:
 
 - a compatible Actions runner and C compiler for `go test -race`;
-- the approved Go 1.25.12 toolchain preinstalled or supplied through an internal distribution path, with `GOTOOLCHAIN=local` when automatic public toolchain downloads are prohibited;
+- the approved Go 1.25.13 toolchain preinstalled or supplied through an internal distribution path, with `GOTOOLCHAIN=local` when automatic public toolchain downloads are prohibited;
 - access to approved Go module and vulnerability-database mirrors, including either a preinstalled `govulncheck v1.6.0` binary selected with `GOVULNCHECK=govulncheck` or the separately mirrored `golang.org/x/vuln` tool module graph used by the default Make target;
 - the pinned Actions in its allowlist;
 - dependency-graph and dependency-review capabilities;
