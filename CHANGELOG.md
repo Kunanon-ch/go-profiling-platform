@@ -31,6 +31,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Security
 
+- Updated the Go toolchain and smoke builder to 1.25.13 and `github.com/klauspost/compress` to v1.18.7 to address the September 30 scheduled vulnerability scan findings.
 - Defined an authenticated TLS gateway as mandatory for production because Pyroscope OSS does not provide its own authentication layer.
 - Prohibited literal application, gateway, object-store, and TLS secrets in source, images, manifests, and ordinary Helm values.
 - Documented profile-data classification, label restrictions, tenant-header trust, network isolation, retention, backup, and restore controls.

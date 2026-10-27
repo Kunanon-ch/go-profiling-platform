@@ -75,7 +75,7 @@ Every row needs a real, reviewed value and named owner before production. Secret
 | Application and backend canary thresholds/duration | Rollout record | Service/SRE owner |
 | On-call, escalation, incident, support, and change record | Operations | Operations owner |
 | Apache-2.0/AGPL-3.0 decision, SBOM, and source obligations | Release evidence | Legal/OSPO owner |
-| Approved Go 1.25.12 toolchain distribution plus internal mirrors for Go modules, chart, and images | Build/install | Supply-chain/platform owner |
+| Approved Go 1.25.13 toolchain distribution plus internal mirrors for Go modules, chart, and images | Build/install | Supply-chain/platform owner |
 
 ## Air-gapped and dependency-mirror decision
 
@@ -83,7 +83,7 @@ The runtime design requires no public-cloud API and should require no internet e
 
 For an air-gapped or controlled environment, the platform team must:
 
-1. preinstall or internally distribute the exact approved Go 1.25.12 toolchain; set `GOTOOLCHAIN=local` where runners must reject automatic public toolchain downloads;
+1. preinstall or internally distribute the exact approved Go 1.25.13 toolchain; set `GOTOOLCHAIN=local` where runners must reject automatic public toolchain downloads;
 2. mirror the approved `pyroscope-go` module and all transitive modules into the internal Go proxy;
 3. preinstall an approved `govulncheck v1.6.0` binary and invoke the gate with `make verify GOVULNCHECK=govulncheck`, or mirror `golang.org/x/vuln/cmd/govulncheck@v1.6.0` and its build-time transitive modules for the default Make target; these modules are separate from this repository's `go.mod` graph;
 4. mirror the exact Pyroscope, gateway, and optional Grafana images by digest into the approved internal registry;

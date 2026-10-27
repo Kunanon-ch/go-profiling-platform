@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: "1.25.12"
+  GO_VERSION: "1.25.13"
   GOTOOLCHAIN: local
   GOWORK: "off"
   COVERAGE_THRESHOLD: "80.0"
