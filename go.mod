@@ -2,7 +2,7 @@ module profiler-probe
 
 go 1.25.0
 
-toolchain go1.25.13
+toolchain go1.27.3
 
 require github.com/grafana/pyroscope-go v1.4.1
 
